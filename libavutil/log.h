@@ -24,6 +24,7 @@
 #include <stdarg.h>
 #include "attributes.h"
 #include "version.h"
+#include "dict.h"
 
 typedef enum {
     AV_CLASS_CATEGORY_NA = 0,
@@ -379,6 +380,15 @@ int av_log_format_line2(void *ptr, int level, const char *fmt, va_list vl,
 
 void av_log_set_flags(int arg);
 int av_log_get_flags(void);
+
+/**
+ * Set syslog JSON log.
+ *
+ * @param[in] ident openlog ident param, can be NULL.
+ * @param[in] entries pointer to a dictionary struct. These entries are
+ *            added to each log, can be NULL.
+ */
+int av_log_set_syslog(const char* ident, AVDictionary* entries);
 
 /**
  * @}

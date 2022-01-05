@@ -124,6 +124,9 @@ static const AVOption options[] = {
       { "pts", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = MOV_PRFT_SRC_PTS}, 0, 0, AV_OPT_FLAG_ENCODING_PARAM, .unit = "prft"},
       { "wallclock", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = MOV_PRFT_SRC_WALLCLOCK}, 0, 0, AV_OPT_FLAG_ENCODING_PARAM, .unit = "prft"},
     { "write_tmcd", "force or disable writing tmcd", offsetof(MOVMuxContext, write_tmcd), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, AV_OPT_FLAG_ENCODING_PARAM},
+    { "ism_offset", "Offset to the ISM fragment start times", offsetof(MOVMuxContext, ism_offset), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, AV_OPT_FLAG_ENCODING_PARAM},
+    { "video_track_timescale", "set timescale of all video tracks", offsetof(MOVMuxContext, video_track_timescale), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
+    { "audio_track_timescale", "set timescale of all audio tracks", offsetof(MOVMuxContext, audio_track_timescale), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     { NULL },
 };
 
@@ -2906,6 +2909,10 @@ static int mov_write_stbl_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContext
          track->par->codec_tag == MKTAG('r','t','p',' ')) &&
         track->has_keyframes && track->has_keyframes < track->entry)
         mov_write_stss_tag(pb, track, MOV_SYNC_SAMPLE);
+    if (track->par->codec_type == AVMEDIA_TYPE_VIDEO &&
+        mov->flags & FF_MOV_FLAG_CMAF &&
+        !track->has_keyframes)
+        mov_write_stss_tag(pb, track, MOV_SYNC_SAMPLE);
     if (track->par->codec_type == AVMEDIA_TYPE_VIDEO && track->has_disposable)
         mov_write_sdtp_tag(pb, track);
     if (track->mode == MODE_MOV && track->flags & MOV_TRACK_STPS)
@@ -5022,7 +5029,8 @@ static int mov_write_trun_tag(AVIOContext *pb, MOVMuxContext *mov,
     return update_size(pb, pos);
 }
 
-static int mov_write_tfxd_tag(AVIOContext *pb, MOVTrack *track)
+static int mov_write_tfxd_tag(AVIOContext *pb, MOVMuxContext *mov,
+                              MOVTrack *track)
 {
     int64_t pos = avio_tell(pb);
     static const uint8_t uuid[] = {
@@ -5035,7 +5043,7 @@ static int mov_write_tfxd_tag(AVIOContext *pb, MOVTrack *track)
     avio_write(pb, uuid, AV_UUID_LEN);
     avio_w8(pb, 1);
     avio_wb24(pb, 0);
-    avio_wb64(pb, track->cluster[0].dts + track->cluster[0].cts);
+    avio_wb64(pb, track->cluster[0].dts + track->cluster[0].cts + mov->ism_offset);
     avio_wb64(pb, track->end_pts -
                   (track->cluster[0].dts + track->cluster[0].cts));
 
@@ -5114,7 +5122,7 @@ static int mov_add_tfra_entries(AVIOContext *pb, MOVMuxContext *mov, int tracks,
         info->size     = size;
         // Try to recreate the original pts for the first packet
         // from the fields we have stored
-        info->time     = track->cluster[0].dts + track->cluster[0].cts;
+        info->time     = track->cluster[0].dts + track->cluster[0].cts + mov->ism_offset;
         info->duration = track->end_pts -
                          (track->cluster[0].dts + track->cluster[0].cts);
         // If the pts is less than zero, we will have trimmed
@@ -5144,7 +5152,8 @@ static void mov_prune_frag_info(MOVMuxContext *mov, int tracks, int max)
     }
 }
 
-static int mov_write_tfdt_tag(AVIOContext *pb, MOVTrack *track)
+static int mov_write_tfdt_tag(AVIOContext *pb, MOVMuxContext *mov,
+                              MOVTrack *track)
 {
     int64_t pos = avio_tell(pb);
 
@@ -5152,7 +5161,7 @@ static int mov_write_tfdt_tag(AVIOContext *pb, MOVTrack *track)
     ffio_wfourcc(pb, "tfdt");
     avio_w8(pb, 1); /* version */
     avio_wb24(pb, 0);
-    avio_wb64(pb, track->cluster[0].dts - track->start_dts);
+    avio_wb64(pb, track->cluster[0].dts - track->start_dts + mov->ism_offset);
     return update_size(pb, pos);
 }
 
@@ -5167,7 +5176,7 @@ static int mov_write_traf_tag(AVIOContext *pb, MOVMuxContext *mov,
 
     mov_write_tfhd_tag(pb, mov, track, moof_offset);
     if (mov->mode != MODE_ISM)
-        mov_write_tfdt_tag(pb, track);
+        mov_write_tfdt_tag(pb, mov, track);
     for (i = 1; i < track->entry; i++) {
         if (track->cluster[i].pos != track->cluster[i - 1].pos + track->cluster[i - 1].size) {
             mov_write_trun_tag(pb, mov, track, moof_size, start, i);
@@ -5176,7 +5185,7 @@ static int mov_write_traf_tag(AVIOContext *pb, MOVMuxContext *mov,
     }
     mov_write_trun_tag(pb, mov, track, moof_size, start, track->entry);
     if (mov->mode == MODE_ISM) {
-        mov_write_tfxd_tag(pb, track);
+        mov_write_tfxd_tag(pb, mov, track);
 
         if (mov->ism_lookahead) {
             int size = 16 + 4 + 1 + 16 * mov->ism_lookahead;
@@ -7549,7 +7558,13 @@ static int mov_init(AVFormatContext *s)
                     return AVERROR(ENOMEM);
             }
         } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            track->timescale = st->codecpar->sample_rate;
+            if (mov->audio_track_timescale) {
+                track->timescale = mov->audio_track_timescale;
+                if (mov->mode == MODE_ISM && mov->audio_track_timescale != 10000000)
+                    av_log(s, AV_LOG_WARNING, "Warning: some tools, like mp4split, assume a timescale of 10000000 for ISMV.\n");
+            } else {
+                track->timescale = st->codecpar->sample_rate;
+            }
             if (!st->codecpar->frame_size && !av_get_bits_per_sample(st->codecpar->codec_id)) {
                 av_log(s, AV_LOG_WARNING, "track %d: codec frame size is not set\n", i);
                 track->audio_vbr = 1;
@@ -7641,8 +7656,10 @@ static int mov_init(AVFormatContext *s)
            doesn't mandate a track timescale of 10,000,000. The muxer allows a custom timescale
            for video tracks, so if user-set, it isn't overwritten */
         if (mov->mode == MODE_ISM &&
-            (st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO ||
-            (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && !mov->video_track_timescale))) {
+            ((st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO &&
+              st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) ||
+             (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && !mov->audio_track_timescale) ||
+             (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && !mov->video_track_timescale))) {
              track->timescale = 10000000;
         }
 

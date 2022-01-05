@@ -495,3 +495,101 @@ void avpriv_report_missing_feature(void *avc, const char *msg, ...)
     missing_feature_sample(0, avc, msg, argument_list);
     va_end(argument_list);
 }
+
+#ifdef _WIN32
+
+int av_log_set_syslog(const char* /*ident*/, AVDictionary* /*entries*/)
+{
+    av_log(NULL, AV_LOG_FATAL, "Syslog is not implemented on this platform\n");
+
+    return AVERROR(EINVAL);
+}
+
+#else
+
+#include <syslog.h>
+
+static const struct { int av_level; int syslog_level; } syslog_levels[] = {
+    { AV_LOG_PANIC  , LOG_ERR },
+    { AV_LOG_FATAL  , LOG_ERR },
+    { AV_LOG_ERROR  , LOG_ERR },
+    { AV_LOG_WARNING, LOG_WARNING },
+    { AV_LOG_INFO   , LOG_INFO },
+    { AV_LOG_VERBOSE, LOG_DEBUG },
+    { AV_LOG_DEBUG  , LOG_DEBUG },
+    { AV_LOG_TRACE  , LOG_DEBUG },
+};
+
+static AVDictionary *syslog_entries = NULL;
+
+static void av_bprint_json_string(AVBPrint *dstbuf, const char *src)
+{
+    av_bprint_chars(dstbuf, '"', 1);
+    for (; *src; src++) {
+        // Keep only printable characters
+        if ('\x1f' < *src & *src < '\x7f') {
+            // Escape '"' and '\'
+            if (strchr("\"\\", *src))
+                av_bprint_chars(dstbuf, '\\', 1);
+            av_bprint_chars(dstbuf, *src, 1);
+        }
+    }
+    av_bprint_chars(dstbuf, '"', 1);
+}
+
+static void av_log_syslog_callback(void* ptr, int level, const char* fmt, va_list vl)
+{
+    AVBPrint line, msg;
+    AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
+    int syslog_level = LOG_INFO;
+    AVDictionaryEntry *entry = NULL;
+
+    // Level
+    if (level > av_log_level)
+        return;
+    for (int i = 0; i < FF_ARRAY_ELEMS(syslog_levels); i++) {
+        if (syslog_levels[i].av_level == level) {
+            syslog_level = syslog_levels[i].syslog_level;
+            break;
+        }
+    }
+    // Prepare buf
+    av_bprint_init(&line, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    av_bprint_init(&msg, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    // Prepare log message
+	if (avc) {
+        av_bprintf(&msg, "[%s @ %p] ", avc->item_name(ptr), ptr);
+	}
+    av_vbprintf(&msg, fmt, vl);
+    // Prepare JSON
+    if (strlen(msg.str)) {
+	    av_bprintf(&line, "{\"message\":");
+	    av_bprint_json_string(&line, msg.str);
+        for (int i = 0; i < av_dict_count(syslog_entries); i++) {
+            entry = av_dict_get(syslog_entries, "", entry, AV_DICT_IGNORE_SUFFIX);
+            av_bprint_chars(&line, ',', 1);
+	        av_bprint_json_string(&line, entry->key);
+            av_bprint_chars(&line, ':', 1);
+	        av_bprint_json_string(&line, entry->value);
+        }
+        av_bprint_chars(&line, '}', 1);
+        // Log
+        syslog(syslog_level, "%s", line.str);
+    }
+    // Clean
+    av_bprint_finalize(&line, NULL);
+    av_bprint_finalize(&msg, NULL);
+}
+
+int av_log_set_syslog(const char* ident, AVDictionary* entries)
+{
+    syslog_entries = entries;
+
+    openlog(ident, LOG_PID, LOG_USER | LOG_SYSLOG);
+
+    av_log_set_callback(&av_log_syslog_callback);
+
+    return 0;
+}
+
+#endif
