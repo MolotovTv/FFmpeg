@@ -1,6 +1,9 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 7.1.1-mtv:
+- Molotov patches
+
 version 7.1.1:
  avformat/hls: Partially revert "reduce default max reload to 3"
  avformat/mov: (v4) fix get_eia608_packet
