@@ -1,6 +1,10 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 4.4.1+mtv:
+- Molotov patches
+
+
 version 4.4.1:
 - avcodec/flac_parser: Consider AV_INPUT_BUFFER_PADDING_SIZE
 - avcodec/ttadsp: Fix integer overflows in tta_filter_process_c()
