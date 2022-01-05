@@ -1483,3 +1483,34 @@ int show_sinks(void *optctx, const char *opt, const char *arg)
     return ret;
 }
 #endif /* CONFIG_AVDEVICE */
+
+int opt_syslog(void *optctx, const char *opt, const char *arg)
+{
+    int ret = 0;
+    char *key, *val;
+    char *ident = NULL;
+    AVDictionary *entries = NULL;
+
+    while (arg && *arg) {
+        if ((ret = av_opt_get_key_value(&arg, "=", ":", 0, &key, &val)) < 0) {
+            av_log(NULL, AV_LOG_ERROR,
+                       "Failed to parse syslog key/value: %s\n",
+                       av_err2str(ret));
+            return ret;
+        }
+        // syslog ident
+        if (!strcmp(key, "ident")) {
+            if (ident)
+                av_free(ident);
+            ident = val;
+            av_free(key);
+        } else {
+            av_dict_set(&entries, key, val, AV_DICT_DONT_STRDUP_KEY | AV_DICT_DONT_STRDUP_VAL);
+        }
+
+        if (*arg)
+            arg++;
+    }
+
+    return av_log_set_syslog(ident, entries);
+}

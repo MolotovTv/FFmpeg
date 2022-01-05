@@ -215,9 +215,11 @@ typedef struct MOVMuxContext {
     int max_fragment_size;
     int ism_lookahead;
     AVIOContext *mdat_buf;
+    int64_t ism_offset;
     int first_trun;
 
     int video_track_timescale;
+    int audio_track_timescale;
 
     int reserved_moov_size; ///< 0 for disabled, -1 for automatic, size otherwise
     int64_t reserved_header_pos;

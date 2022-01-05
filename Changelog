@@ -1,6 +1,9 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
+version 7.0.2+mtv:
+- Molotov patches
+
 version 7.0.2:
  avcodec/snow: Fix off by 1 error in run_buffer
  avcodec/utils: apply the same alignment to YUV410 as we do to YUV420 for snow
