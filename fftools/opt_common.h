@@ -196,6 +196,11 @@ int opt_cpuflags(void *optctx, const char *opt, const char *arg);
  */
 int opt_cpucount(void *optctx, const char *opt, const char *arg);
 
+/**
+ * Set the syslog JSON log.
+ */
+int opt_syslog(void *optctx, const char *opt, const char *arg);
+
 #define CMDUTILS_COMMON_OPTIONS                                                                                         \
     { "L",           OPT_EXIT,             { .func_arg = show_license },     "show license" },                          \
     { "h",           OPT_EXIT,             { .func_arg = show_help },        "show help", "topic" },                    \
@@ -226,6 +231,7 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg);
     { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags" },     \
     { "cpucount",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpucount },     "force specific cpu count", "count" },     \
     { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner" },          \
+    { "syslog",      HAS_ARG,              { .func_arg = opt_syslog },       "set json syslog logging", "syslog" },     \
     CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                    \
 
 #endif /* FFTOOLS_OPT_COMMON_H */
