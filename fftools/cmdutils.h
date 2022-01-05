@@ -111,6 +111,11 @@ int opt_max_alloc(void *optctx, const char *opt, const char *arg);
 int opt_codec_debug(void *optctx, const char *opt, const char *arg);
 
 /**
+ * Set the syslog JSON log.
+ */
+int opt_syslog(void *optctx, const char *opt, const char *arg);
+
+/**
  * Limit the execution time.
  */
 int opt_timelimit(void *optctx, const char *opt, const char *arg);
@@ -247,6 +252,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags" },     \
     { "cpucount",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpucount },     "force specific cpu count", "count" },     \
     { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner" },          \
+    { "syslog",      HAS_ARG,              { .func_arg = opt_syslog },       "set json syslog logging", "syslog" },     \
     CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                    \
 
 /**

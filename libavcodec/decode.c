@@ -448,7 +448,7 @@ static inline int decode_simple_internal(AVCodecContext *avctx, AVFrame *frame, 
         !avci->showed_multi_packet_warning &&
         ret >= 0 && ret != pkt->size && !(avctx->codec->capabilities & AV_CODEC_CAP_SUBFRAMES)) {
         av_log(avctx, AV_LOG_WARNING, "Multiple frames in a packet.\n");
-        avci->showed_multi_packet_warning = 1;
+        //avci->showed_multi_packet_warning = 1;
     }
 
     if (!got_frame)
