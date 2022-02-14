@@ -3,6 +3,7 @@ releases are sorted from youngest to oldest.
 
 version 6.1+mtv:
 - Molotov patches
+- Redis protocol via libhiredis
 
 
 version 7.0:
