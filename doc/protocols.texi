@@ -783,6 +783,48 @@ Example usage:
 -f rtp_mpegts -fec prompeg=l=8:d=4 rtp://@var{hostname}:@var{port}
 @end example
 
+@section redis
+
+Redis protocol using hiredis C library.
+
+FFmpeg must be compiled with --enable-libhiredis to support Redis.
+
+Only writing is supported at the moment.
+Authentication is not supported at the moment.
+
+Following syntax is required.
+
+@example
+redis://[hostname][:port]/key
+@end example
+
+Where @var{hostname} (default is 127.0.0.1) and @var{port} (default is 6379) is the address of Redis server,
+where @var{key} is the Redis key that will be requested.
+
+The Redis key gets overwritten at each first write:
+the SET command is used for the first call to write, the APPEND command is used for all subsequent writes.
+
+The following options are supported:
+
+@table @option
+
+@item timeout
+The timeout in microseconds during the initial connection to the Redis server
+and all commands executed afterwards.
+The default value is 0.5 seconds.
+
+@item ttl
+The time to live in seconds of the Redis key.
+The default value is 0 second.
+When ttl is greater than 0 second, the EXPIRE command is executed is on the Redis key at closing.
+
+@end table
+
+Example: Generate JPEG thumbnails every second from an UDP stream and push it to @var{stream1} key on hostname:port Redis server.
+@example
+ffmpeg -i udp://<ip>:<port> -vf fps=1 -f image2 -update 1 redis://hostname:port/stream1
+@end example
+
 @section rist
 
 Reliable Internet Streaming Transport protocol
