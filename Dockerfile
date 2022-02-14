@@ -13,6 +13,7 @@ ARG \
     FRIDIBI_VERSION=v1.0.11 \
     GETTEXT_VERSION=0.21 \
     HARFBUZZ_VERSION=3.2.0 \
+    HIREDIS_VERSION=v1.0.2 \
     LAME_VERSION=3.100 \
     LIBASS_VERSION=0.15.2 \
     LIBFREI0R_VERSION=v1.7.0 \
@@ -403,6 +404,17 @@ RUN \
     cd /tmp && \
     rm -rf srt
 
+# Install hiredis
+RUN \
+    git clone --depth 1 --branch ${HIREDIS_VERSION} https://github.com/redis/hiredis.git && \
+    mkdir -p hiredis/build && \
+    cd hiredis/build && \
+    cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && \
+    rm -rf hiredis
+
 # Install ffmpeg
 RUN \
     git clone --depth 1 --branch ${FFMPEG_VERSION} https://github.com/MolotovTv/ffmpeg.git && \
@@ -428,6 +440,7 @@ RUN \
         --enable-libfdk_aac \
         --enable-libfreetype \
         --enable-libfribidi \
+        --enable-libhiredis \
         --enable-libmp3lame \
         --enable-libnpp \
         --enable-libopencore-amrnb \
