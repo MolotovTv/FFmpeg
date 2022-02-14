@@ -3,6 +3,7 @@ releases are sorted from youngest to oldest.
 
 version 7.1.1-mtv:
 - Molotov patches
+- Redis protocol via libhiredis
 
 version 7.1.1:
  avformat/hls: Partially revert "reduce default max reload to 3"
