@@ -3,6 +3,7 @@ releases are sorted from youngest to oldest.
 
 version 7.0.2+mtv:
 - Molotov patches
+- Redis protocol via libhiredis
 
 version 7.0.2:
  avcodec/snow: Fix off by 1 error in run_buffer
