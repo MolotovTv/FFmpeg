@@ -223,7 +223,13 @@ static int h264_metadata_update_sps(AVBSFContext *bsf,
         sps->vui.timing_info_present_flag = 1;
         need_vui = 1;
     }
-    SET_VUI_FIELD(fixed_frame_rate_flag);
+
+    // Set fixed frame rate flag and update low_delay_hrd_flag to match
+    if (ctx->fixed_frame_rate_flag >= 0) {
+        sps->vui.fixed_frame_rate_flag = ctx->fixed_frame_rate_flag;
+        sps->vui.low_delay_hrd_flag = 1 - sps->vui.fixed_frame_rate_flag;
+    }
+
     if (ctx->zero_new_constraint_set_flags) {
         sps->constraint_set4_flag = 0;
         sps->constraint_set5_flag = 0;

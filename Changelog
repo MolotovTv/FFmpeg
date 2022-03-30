@@ -4,6 +4,7 @@ releases are sorted from youngest to oldest.
 version 7.0.2+mtv:
 - Molotov patches
 - Redis protocol via libhiredis
+- h264_metadata bitstream fixed_frame_rate_flag fix
 
 version 7.0.2:
  avcodec/snow: Fix off by 1 error in run_buffer
