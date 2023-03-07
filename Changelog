@@ -5,6 +5,7 @@ version 6.1+mtv:
 - Molotov patches
 - Redis protocol via libhiredis
 - h264_metadata bitstream fixed_frame_rate_flag fix
+- 'jpeg' tag and custom 'kind' box in MP4
 
 
 version 7.0:
