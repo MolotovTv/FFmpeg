@@ -127,6 +127,7 @@ static const AVOption options[] = {
     { "ism_offset", "Offset to the ISM fragment start times", offsetof(MOVMuxContext, ism_offset), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, AV_OPT_FLAG_ENCODING_PARAM},
     { "video_track_timescale", "set timescale of all video tracks", offsetof(MOVMuxContext, video_track_timescale), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM},
     { "audio_track_timescale", "set timescale of all audio tracks", offsetof(MOVMuxContext, audio_track_timescale), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
+    { "kind", "set custom kind for the track as schemeURI=value", offsetof(MOVMuxContext, kind), AV_OPT_TYPE_DICT, { 0 }, 0, 0, AV_OPT_FLAG_ENCODING_PARAM },
     { NULL },
 };
 
@@ -3813,9 +3814,17 @@ static int mov_write_track_kind(AVIOContext *pb, const char *scheme_uri,
     return update_size(pb, pos);
 }
 
-static int mov_write_track_kinds(AVIOContext *pb, AVStream *st)
+static int mov_write_track_kinds(AVIOContext *pb, MOVMuxContext *mov, AVStream *st)
 {
     int ret = AVERROR_BUG;
+    AVDictionaryEntry *en = NULL;
+
+    while ((en = av_dict_get(mov->kind, "", en, AV_DICT_IGNORE_SUFFIX))) {
+        if ((ret = mov_write_track_kind(pb, en->key, en->value)) < 0)
+            return ret;
+
+        return 0;
+    }
 
     for (int i = 0; ff_mov_track_kind_table[i].scheme_uri; i++) {
         const struct MP4TrackKindMapping map = ff_mov_track_kind_table[i];
@@ -3851,7 +3860,7 @@ static int mov_write_track_udta_tag(AVIOContext *pb, MOVMuxContext *mov,
         mov_write_track_metadata(pb_buf, st, "name", "title");
 
     if (mov->mode & MODE_MP4) {
-        if ((ret = mov_write_track_kinds(pb_buf, st)) < 0)
+        if ((ret = mov_write_track_kinds(pb_buf, mov, st)) < 0)
             return ret;
     }
 
@@ -7681,6 +7690,9 @@ static int mov_init(AVFormatContext *s)
         }
     }
 
+    if (av_dict_count(mov->kind) > 1)
+        av_log(s, AV_LOG_WARNING, "-kind contains several entries, only the first one will be kept\n");
+
     enable_tracks(s);
     return 0;
 }
@@ -8178,6 +8190,7 @@ static const AVCodecTag codec_mp4_tags[] = {
     { AV_CODEC_ID_MPEGH_3D_AUDIO,  MKTAG('m', 'h', 'm', '1') },
     { AV_CODEC_ID_TTML,            MOV_MP4_TTML_TAG          },
     { AV_CODEC_ID_TTML,            MOV_ISMV_TTML_TAG         },
+    { AV_CODEC_ID_MJPEG,           MKTAG('j', 'p', 'e', 'g') },
 
     /* ISO/IEC 23003-5 integer formats */
     { AV_CODEC_ID_PCM_S16BE,       MOV_MP4_IPCM_TAG          },
