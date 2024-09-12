@@ -39,6 +39,8 @@
 
 typedef struct VideoMuxData {
     const AVClass *class;  /**< Class for private options. */
+    int64_t start_seconds;
+    int64_t start_pts;
     int start_img_number;
     int img_number;
     int split_planes;       /**< use independent file for each Y, U, V plane */
@@ -164,6 +166,17 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
             av_log(s, AV_LOG_ERROR, "Cannot write filename by pts of the frames.");
             return AVERROR(EINVAL);
         }
+    } else if (img->start_seconds) {
+        if (img->start_pts == AV_NOPTS_VALUE) {
+            img->start_pts = pkt->pts;
+        }
+
+        if (av_get_frame_filename2(filename, sizeof(filename), s->url,
+                                   img->start_seconds + av_rescale_q(pkt->pts - img->start_pts, pkt->time_base, (AVRational){1, 1}),
+                                   AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
+            av_log(s, AV_LOG_ERROR, "Cannot write filename by start seconds.");
+            return AVERROR(EINVAL);
+        }
     } else if (av_get_frame_filename2(filename, sizeof(filename), s->url,
                                       img->img_number,
                                       AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
@@ -251,6 +264,15 @@ static int query_codec(enum AVCodecID id, int std_compliance)
     return std_compliance < FF_COMPLIANCE_NORMAL;
 }
 
+static int image2_init(AVFormatContext *s)
+{
+    VideoMuxData *img = s->priv_data;
+
+    img->start_pts = AV_NOPTS_VALUE;
+
+    return 0;
+}
+
 #define OFFSET(x) offsetof(VideoMuxData, x)
 #define ENC AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption muxoptions[] = {
@@ -260,6 +282,7 @@ static const AVOption muxoptions[] = {
     { "frame_pts",    "use current frame pts for filename", OFFSET(frame_pts),  AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, ENC },
     { "atomic_writing", "write files atomically (using temporary files and renames)", OFFSET(use_rename), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, ENC },
     { "protocol_opts", "specify protocol options for the opened files", OFFSET(protocol_opts), AV_OPT_TYPE_DICT, {0}, 0, 0, ENC },
+    { "start_seconds", "use time in seconds for filename", OFFSET(start_seconds), AV_OPT_TYPE_INT64, { .i64 = 0 }, INT64_MIN, INT64_MAX, ENC },
     { NULL },
 };
 
@@ -279,6 +302,7 @@ const FFOutputFormat ff_image2_muxer = {
                       "im24,sunras,vbn,xbm,xface,pix,y,avif,qoi,hdr,wbmp",
     .priv_data_size = sizeof(VideoMuxData),
     .p.video_codec  = AV_CODEC_ID_MJPEG,
+    .init           = image2_init,
     .write_header   = write_header,
     .write_packet   = write_packet,
     .query_codec    = query_codec,

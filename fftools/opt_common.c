@@ -1514,3 +1514,10 @@ int opt_syslog(void *optctx, const char *opt, const char *arg)
 
     return av_log_set_syslog(ident, entries);
 }
+
+int opt_json_log(void *optctx, const char *opt, const char *arg)
+{
+    av_log_set_json();
+
+    return 0;
+}

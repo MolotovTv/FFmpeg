@@ -496,6 +496,86 @@ void avpriv_report_missing_feature(void *avc, const char *msg, ...)
     va_end(argument_list);
 }
 
+static void av_bprint_json_string(AVBPrint *dst, const char *src)
+{
+    static const char json_escape[] = {'"', '\\', '\b', '\f', '\n', '\r', '\t', 0};
+    static const char json_subst[]  = {'"', '\\',  'b',  'f',  'n',  'r',  't', 0};
+    const char *p;
+
+    for (p = src; *p; p++) {
+        char *s = strchr(json_escape, *p);
+        if (s) {
+            av_bprint_chars(dst, '\\', 1);
+            av_bprint_chars(dst, json_subst[s - json_escape], 1);
+        } else if ((unsigned char)*p < 32) {
+            av_bprintf(dst, "\\u00%02x", *p & 0xff);
+        } else {
+            av_bprint_chars(dst, *p, 1);
+        }
+    }
+}
+
+static bool av_bprint_json_item_str(AVBPrint *dst, const char *key, const char *value, bool already_print)
+{
+    // Print only if key and value are not empty
+    if (!strlen(key) || !strlen(value))
+        return false;
+
+    if (already_print)
+        av_bprint_chars(dst, ',', 1);
+
+    av_bprint_chars(dst, '"', 1);
+    av_bprint_json_string(dst, key);
+    av_bprintf(dst, "\":\"");
+    av_bprint_json_string(dst, value);
+    av_bprint_chars(dst, '"', 1);
+
+    return true;
+}
+
+
+static bool av_bprint_json_item_int(AVBPrint *dst, const char *key, int value, bool already_print)
+{
+    // Print only if key and value are not empty
+    if (!strlen(key))
+        return false;
+
+    if (already_print)
+        av_bprint_chars(dst, ',', 1);
+
+    av_bprint_chars(dst, '"', 1);
+    av_bprint_json_string(dst, key);
+    av_bprintf(dst, "\":%d", value);
+
+    return true;
+}
+
+static void av_bprint_json_items(AVBPrint *dst, void* ptr, int level, const char* fmt, va_list vl)
+{
+    AVBPrint buf;
+    AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
+    bool already_print = false;
+
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    // Message
+    av_vbprintf(&buf, fmt, vl);
+    if (!strlen(buf.str))
+        goto end;
+    already_print |= av_bprint_json_item_str(dst, "message", buf.str, already_print);
+    av_bprint_clear(&buf);
+    // AVClass
+    if (avc) {
+        already_print |= av_bprint_json_item_str(dst, "item_name", avc->item_name(ptr), already_print);
+        av_bprintf(&buf, "%p", ptr);
+        already_print |= av_bprint_json_item_str(dst, "ptr", buf.str, already_print);
+    }
+    // Level
+    av_bprint_json_item_int(dst, "level", level, already_print);
+
+end:
+    av_bprint_finalize(&buf, NULL);
+}
+
 #ifdef _WIN32
 
 int av_log_set_syslog(const char* /*ident*/, AVDictionary* /*entries*/)
@@ -522,25 +602,9 @@ static const struct { int av_level; int syslog_level; } syslog_levels[] = {
 
 static AVDictionary *syslog_entries = NULL;
 
-static void av_bprint_json_string(AVBPrint *dstbuf, const char *src)
-{
-    av_bprint_chars(dstbuf, '"', 1);
-    for (; *src; src++) {
-        // Keep only printable characters
-        if ('\x1f' < *src & *src < '\x7f') {
-            // Escape '"' and '\'
-            if (strchr("\"\\", *src))
-                av_bprint_chars(dstbuf, '\\', 1);
-            av_bprint_chars(dstbuf, *src, 1);
-        }
-    }
-    av_bprint_chars(dstbuf, '"', 1);
-}
-
 static void av_log_syslog_callback(void* ptr, int level, const char* fmt, va_list vl)
 {
-    AVBPrint line, msg;
-    AVClass* avc = ptr ? *(AVClass**)ptr : NULL;
+    AVBPrint line;
     int syslog_level = LOG_INFO;
     AVDictionaryEntry *entry = NULL;
 
@@ -553,32 +617,22 @@ static void av_log_syslog_callback(void* ptr, int level, const char* fmt, va_lis
             break;
         }
     }
-    // Prepare buf
-    av_bprint_init(&line, 0, AV_BPRINT_SIZE_AUTOMATIC);
-    av_bprint_init(&msg, 0, AV_BPRINT_SIZE_AUTOMATIC);
-    // Prepare log message
-	if (avc) {
-        av_bprintf(&msg, "[%s @ %p] ", avc->item_name(ptr), ptr);
-	}
-    av_vbprintf(&msg, fmt, vl);
-    // Prepare JSON
-    if (strlen(msg.str)) {
-	    av_bprintf(&line, "{\"message\":");
-	    av_bprint_json_string(&line, msg.str);
+
+    av_bprint_init(&line, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprint_json_items(&line, ptr, level, fmt, vl);
+
+    if (strlen(line.str)) {
         for (int i = 0; i < av_dict_count(syslog_entries); i++) {
             entry = av_dict_get(syslog_entries, "", entry, AV_DICT_IGNORE_SUFFIX);
-            av_bprint_chars(&line, ',', 1);
-	        av_bprint_json_string(&line, entry->key);
-            av_bprint_chars(&line, ':', 1);
-	        av_bprint_json_string(&line, entry->value);
+            av_bprint_json_item_str(&line, entry->key, entry->value, true);
         }
-        av_bprint_chars(&line, '}', 1);
-        // Log
-        syslog(syslog_level, "%s", line.str);
+
+        ff_mutex_lock(&mutex);
+        syslog(syslog_level, "{%s}", line.str);
+        ff_mutex_unlock(&mutex);
     }
-    // Clean
+
     av_bprint_finalize(&line, NULL);
-    av_bprint_finalize(&msg, NULL);
 }
 
 int av_log_set_syslog(const char* ident, AVDictionary* entries)
@@ -593,3 +647,30 @@ int av_log_set_syslog(const char* ident, AVDictionary* entries)
 }
 
 #endif
+
+static void av_log_json_callback(void* ptr, int level, const char* fmt, va_list vl)
+{
+    AVBPrint line;
+
+    if (level > av_log_level)
+        return;
+
+    av_bprint_init(&line, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprint_json_items(&line, ptr, level, fmt, vl);
+
+    if (strlen(line.str)) {
+        ff_mutex_lock(&mutex);
+        fprintf(stderr, "{%s}\n", line.str);
+        ff_mutex_unlock(&mutex);
+    }
+
+    av_bprint_finalize(&line, NULL);
+}
+
+
+int av_log_set_json()
+{
+    av_log_set_callback(&av_log_json_callback);
+
+    return 0;
+}

@@ -1,11 +1,13 @@
 Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
-version 7.0.2+mtv:
+version 7.0.2-mtv:
 - Molotov patches
 - Redis protocol via libhiredis
 - h264_metadata bitstream fixed_frame_rate_flag fix
 - 'jpeg' tag and custom 'kind' box in MP4
+- ffmpeg -json_log option
+- libavformat/img2enc: start_seconds option
 
 version 7.0.2:
  avcodec/snow: Fix off by 1 error in run_buffer

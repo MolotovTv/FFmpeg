@@ -22,6 +22,7 @@
 #define AVUTIL_LOG_H
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include "attributes.h"
 #include "version.h"
 #include "dict.h"
@@ -389,6 +390,11 @@ int av_log_get_flags(void);
  *            added to each log, can be NULL.
  */
 int av_log_set_syslog(const char* ident, AVDictionary* entries);
+
+/**
+ * Set JSON log.
+ */
+int av_log_set_json(void);
 
 /**
  * @}
