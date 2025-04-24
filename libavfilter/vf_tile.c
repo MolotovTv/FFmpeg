@@ -193,12 +193,20 @@ static int end_last_frame(AVFilterContext *ctx)
  * buffers are fed to filter_frame in the order they were obtained from
  * get_buffer (think B-frames). */
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
+static int activate(AVFilterContext *ctx)
 {
-    AVFilterContext *ctx  = inlink->dst;
     TileContext *tile     = ctx->priv;
+    AVFilterLink *inlink  = ctx->inputs[0];
     AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *picref       = NULL;
+    int ret;
     unsigned x0, y0;
+
+    ret = ff_inlink_consume_frame(inlink, &picref);
+    if (ret < 0)
+        return ret;
+    if (!picref)
+        return AVERROR(EAGAIN);
 
     if (!tile->out_ref) {
         tile->out_ref = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -246,19 +254,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
     return 0;
 }
 
-static int request_frame(AVFilterLink *outlink)
-{
-    AVFilterContext *ctx = outlink->src;
-    TileContext *tile    = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
-    int r;
-
-    r = ff_request_frame(inlink);
-    if (r == AVERROR_EOF && tile->current && tile->out_ref)
-        r = end_last_frame(ctx);
-    return r;
-}
-
 static av_cold void uninit(AVFilterContext *ctx)
 {
     TileContext *tile = ctx->priv;
@@ -271,7 +266,6 @@ static const AVFilterPad tile_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .filter_frame = filter_frame,
     },
 };
 
@@ -280,7 +274,6 @@ static const AVFilterPad tile_outputs[] = {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
         .config_props  = config_props,
-        .request_frame = request_frame,
     },
 };
 
@@ -290,6 +283,7 @@ const AVFilter ff_vf_tile = {
     .init          = init,
     .uninit        = uninit,
     .priv_size     = sizeof(TileContext),
+    .activate      = activate,
     FILTER_INPUTS(tile_inputs),
     FILTER_OUTPUTS(tile_outputs),
     FILTER_QUERY_FUNC(query_formats),
